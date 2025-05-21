@@ -24,7 +24,6 @@ public class SortUtils {
         for (int j = low; j < high; j++) {
             if (comparator.compare(array.get(j), pivot) <= 0) {
                 i++;
-                // Размяна на arr[i] и arr[j]
                 swap(array, i, j);
             }
         }
