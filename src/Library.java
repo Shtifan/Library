@@ -1,188 +1,165 @@
 import java.io.*;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
+import java.util.regex.Pattern;
 
-public class Library {
-    private MyDynamicArray<Book> books;
-    String dataFile = "library_data.txt";
+class Library {
+    private final ArrayList<Book> books;
+    private static final String FILE_NAME = "library_data.txt";
+    private static final String DELIMITER = "||";
 
     public Library() {
-        this.books = new MyDynamicArray<>();
+        this.books = new ArrayList<>();
     }
 
-    public Library(String dataFileName) {
-        this.books = new MyDynamicArray<>();
-        this.dataFile = dataFileName;
-    }
-
-    public void addBook(Book book) {
-        if (book == null) {
-            throw new IllegalArgumentException("Книгата не може да бъде null.");
-        }
-        if (findBookByIsbn(book.getIsbn()) != null) {
-            throw new IllegalArgumentException("Книга с ISBN '" + book.getIsbn() + "' вече съществува.");
+    public void addBook(Book book) throws IllegalArgumentException {
+        for (Book b : books) {
+            if (b.getIsbn().equals(book.getIsbn())) {
+                throw new IllegalArgumentException("Книга с ISBN '" + book.getIsbn() + "' вече съществува!");
+            }
         }
         books.add(book);
     }
 
-    public boolean removeBook(String isbn) {
-        if (isbn == null || isbn.trim().isEmpty()) {
-            System.err.println("Опит за изтриване на книга с празен ISBN.");
+    public boolean updateBook(String originalIsbn, Book updatedBook) throws IllegalArgumentException {
+        Book bookToUpdate = null;
+        int bookIndex = -1;
+
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).getIsbn().equals(originalIsbn)) {
+                bookToUpdate = books.get(i);
+                bookIndex = i;
+                break;
+            }
+        }
+
+        if (bookToUpdate == null) {
             return false;
         }
-        for (int i = 0; i < books.size(); i++) {
-            if (books.get(i).getIsbn().equalsIgnoreCase(isbn.trim())) {
-                books.remove(i);
-                return true;
+
+        if (!originalIsbn.equals(updatedBook.getIsbn())) {
+            for (Book b : books) {
+                if (b.getIsbn().equals(updatedBook.getIsbn())) {
+                    throw new IllegalArgumentException("Новият ISBN '" + updatedBook.getIsbn() + "' вече се използва от друга книга.");
+                }
             }
         }
-        return false;
+
+        books.set(bookIndex, updatedBook);
+        return true;
     }
 
-    public boolean updateBook(String isbn, Book updatedBookData) {
-        if (isbn == null || isbn.trim().isEmpty() || updatedBookData == null) {
-            throw new IllegalArgumentException(
-                    "ISBN за търсене или новите данни на книгата не могат да бъдат празни/null.");
-        }
-
-        for (int i = 0; i < books.size(); i++) {
-            Book currentBook = books.get(i);
-            if (currentBook.getIsbn().equalsIgnoreCase(isbn.trim())) {
-                if (!isbn.equalsIgnoreCase(updatedBookData.getIsbn())
-                        && findBookByIsbn(updatedBookData.getIsbn()) != null) {
-                    throw new IllegalArgumentException(
-                            "Вече съществува друга книга с новия ISBN '" + updatedBookData.getIsbn() + "'.");
-                }
-                try {
-                    currentBook.setIsbn(updatedBookData.getIsbn());
-                    currentBook.setTitle(updatedBookData.getTitle());
-                    currentBook.setAuthor(updatedBookData.getAuthor());
-                    currentBook.setYearPublished(updatedBookData.getYearPublished());
-                    return true;
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException("Грешка при обновяване на данни: " + e.getMessage());
-                }
-            }
-        }
-        return false;
+    public boolean removeBook(String isbn) {
+        return books.removeIf(book -> book.getIsbn().equals(isbn));
     }
 
     public Book findBookByIsbn(String isbn) {
-        if (isbn == null || isbn.trim().isEmpty())
-            return null;
-        String searchIsbn = isbn.trim();
         for (Book book : books) {
-            if (book.getIsbn().equalsIgnoreCase(searchIsbn)) {
+            if (book.getIsbn().equals(isbn)) {
                 return book;
             }
         }
         return null;
     }
 
-    public MyDynamicArray<Book> findBooksByTitle(String title) {
-        MyDynamicArray<Book> results = new MyDynamicArray<>();
-        if (title == null || title.trim().isEmpty())
-            return results;
-        String searchTitleLower = title.trim().toLowerCase();
+    public ArrayList<Book> searchBooks(String searchTerm, String criteria) {
+        ArrayList<Book> foundBooks = new ArrayList<>();
+        String term = searchTerm.toLowerCase();
         for (Book book : books) {
-            if (book.getTitle().toLowerCase().contains(searchTitleLower)) {
-                results.add(book);
+            boolean match = false;
+            switch (criteria.toLowerCase()) {
+                case "isbn":
+                    if (book.getIsbn().toLowerCase().contains(term)) match = true;
+                    break;
+                case "title":
+                    if (book.getTitle().toLowerCase().contains(term)) match = true;
+                    break;
+                case "author":
+                    if (book.getAuthor().toString().toLowerCase().contains(term)) match = true;
+                    break;
+            }
+            if (match) {
+                foundBooks.add(book);
             }
         }
-        return results;
+        return foundBooks;
     }
 
-    public MyDynamicArray<Book> findBooksByAuthor(String authorName) {
-        MyDynamicArray<Book> results = new MyDynamicArray<>();
-        if (authorName == null || authorName.trim().isEmpty())
-            return results;
-        String searchAuthorLower = authorName.trim().toLowerCase();
-        for (Book book : books) {
-            String fullName = book.getAuthor().getFirstName().toLowerCase() + " "
-                    + book.getAuthor().getLastName().toLowerCase();
-            if (fullName.contains(searchAuthorLower) ||
-                    book.getAuthor().getFirstName().toLowerCase().contains(searchAuthorLower) ||
-                    book.getAuthor().getLastName().toLowerCase().contains(searchAuthorLower)) {
-                results.add(book);
+    public ArrayList<Book> getAllBooks() {
+        return new ArrayList<>(books);
+    }
+
+    public void sortBooks(String criteria) {
+        Comparator<Book> comparator = null;
+        if ("title".equalsIgnoreCase(criteria)) {
+            comparator = Comparator.comparing(Book::getTitle, String.CASE_INSENSITIVE_ORDER);
+        } else if ("author".equalsIgnoreCase(criteria)) {
+            comparator = Comparator.comparing(b -> b.getAuthor().toString(), String.CASE_INSENSITIVE_ORDER);
+        }
+
+        if (comparator != null) {
+            quickSort(this.books, 0, this.books.size() - 1, comparator);
+        }
+    }
+
+    private void quickSort(List<Book> list, int low, int high, Comparator<Book> comparator) {
+        if (low < high) {
+            int pi = partition(list, low, high, comparator);
+            quickSort(list, low, pi - 1, comparator);
+            quickSort(list, pi + 1, high, comparator);
+        }
+    }
+
+    private int partition(List<Book> list, int low, int high, Comparator<Book> comparator) {
+        Book pivot = list.get(high);
+        int i = (low - 1);
+        for (int j = low; j < high; j++) {
+            if (comparator.compare(list.get(j), pivot) <= 0) {
+                i++;
+                Collections.swap(list, i, j);
             }
         }
-        return results;
+        Collections.swap(list, i + 1, high);
+        return i + 1;
     }
 
-    public MyDynamicArray<Book> getAllBooks() {
-        return books;
-    }
-
-    public void sortByTitle() {
-        SortUtils.quickSort(books, Comparator.comparing(Book::getTitle, String.CASE_INSENSITIVE_ORDER));
-    }
-
-    public void sortByAuthor() {
-        Comparator<Book> authorComparator = Comparator
-                .comparing((Book b) -> b.getAuthor().getLastName(), String.CASE_INSENSITIVE_ORDER)
-                .thenComparing((Book b) -> b.getAuthor().getFirstName(), String.CASE_INSENSITIVE_ORDER);
-        SortUtils.quickSort(books, authorComparator);
-    }
-
-    public void saveToFile() {
-        saveToFile(this.dataFile);
-    }
-
-    public void saveToFile(String filename) {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(filename))) {
+    public void saveBooksToFile() throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
             for (Book book : books) {
-                writer.println(book.toFileString());
+                writer.println(book.getIsbn() + DELIMITER + book.getTitle() + DELIMITER + book.getAuthor().getFirstName() + DELIMITER + book.getAuthor().getLastName() + DELIMITER + book.getYear());
             }
-        } catch (IOException e) {
-            System.err.println("Грешка при запазване на библиотеката във файл '" + filename + "': " + e.getMessage());
         }
     }
 
-    public void loadFromFile() {
-        loadFromFile(this.dataFile);
-    }
-
-    public void loadFromFile(String filename) {
-        File file = new File(filename);
+    public void loadBooksFromFile() throws IOException {
+        books.clear();
+        File file = new File(FILE_NAME);
         if (!file.exists()) {
-            System.out.println("Файлът '" + filename + "' не съществува. Няма заредени данни.");
-            this.books.clear();
             return;
         }
-
-        MyDynamicArray<Book> loadedBooks = new MyDynamicArray<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
             String line;
-            int lineNumber = 0;
             while ((line = reader.readLine()) != null) {
-                lineNumber++;
-                if (line.trim().isEmpty())
-                    continue;
-
-                Book book = Book.fromFileString(line);
-                if (book != null) {
-                    boolean duplicate = false;
-                    for (Book existingBook : loadedBooks) {
-                        if (existingBook.getIsbn().equalsIgnoreCase(book.getIsbn())) {
-                            System.err.println("Грешка на ред " + lineNumber + ": Дублиран ISBN '" + book.getIsbn()
-                                    + "' във файла. Книгата е пропусната.");
-                            duplicate = true;
-                            break;
-                        }
-                    }
-                    if (!duplicate) {
-                        loadedBooks.add(book);
+                String[] parts = line.split(Pattern.quote(DELIMITER));
+                if (parts.length == 5) {
+                    try {
+                        String isbn = parts[0];
+                        String title = parts[1];
+                        String authorFirstName = parts[2];
+                        String authorLastName = parts[3];
+                        int year = Integer.parseInt(parts[4]);
+                        books.add(new Book(isbn, title, new Author(authorFirstName, authorLastName), year));
+                    } catch (NumberFormatException e) {
+                        System.err.println("Грешка при парсване на годината за ред: " + line + " -> " + e.getMessage());
+                    } catch (ArrayIndexOutOfBoundsException e) {
+                        System.err.println("Грешен формат на ред: " + line + " -> " + e.getMessage());
                     }
                 } else {
-                    System.err.println(
-                            "Грешка при четене на ред " + lineNumber + " от файл: Невалиден формат или данни.");
+                    System.err.println("Некоректен ред във файла: " + line + " (очакван брой части: 5, получен: " + parts.length + ")");
                 }
             }
-            this.books = loadedBooks;
-        } catch (FileNotFoundException e) {
-            System.err.println("Файлът '" + filename + "' не е намерен.");
-            this.books.clear();
-        } catch (IOException e) {
-            System.err.println("Грешка при четене от файл '" + filename + "': " + e.getMessage());
         }
     }
 }
