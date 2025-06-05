@@ -1,62 +1,50 @@
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.regex.Pattern;
 
-class Library {
-    private final ArrayList<Book> books;
-    private static final String FILE_NAME = "library_data.txt";
-    private static final String DELIMITER = "||";
+public class Library {
+    private final MyArrayList<Book> books;
+    private static final String DEFAULT_FILE_NAME = "library_data.txt";
 
     public Library() {
-        this.books = new ArrayList<>();
+        this.books = new MyArrayList<>();
+        try {
+            loadFromFile(DEFAULT_FILE_NAME);
+        } catch (IOException e) {
+            System.err.println("Could not load library data: " + e.getMessage());
+        }
     }
 
-    public void addBook(Book book) throws IllegalArgumentException {
-        for (Book b : books) {
-            if (b.getIsbn().equals(book.getIsbn())) {
-                throw new IllegalArgumentException("Книга с ISBN '" + book.getIsbn() + "' вече съществува!");
+    public void addBook(Book book) {
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).getIsbn().equals(book.getIsbn())) {
+                throw new IllegalArgumentException("Book with ISBN " + book.getIsbn() + " already exists.");
             }
         }
         books.add(book);
+        autoSave();
     }
 
-    public boolean updateBook(String originalIsbn, Book updatedBook) throws IllegalArgumentException {
-        Book bookToUpdate = null;
-        int bookIndex = -1;
-
-        for (int i = 0; i < books.size(); i++) {
-            if (books.get(i).getIsbn().equals(originalIsbn)) {
-                bookToUpdate = books.get(i);
-                bookIndex = i;
-                break;
-            }
+    private void autoSave() {
+        try {
+            saveToFile(DEFAULT_FILE_NAME);
+        } catch (IOException e) {
+            System.err.println("Error auto-saving library: " + e.getMessage());
         }
-
-        if (bookToUpdate == null) {
-            return false;
-        }
-
-        if (!originalIsbn.equals(updatedBook.getIsbn())) {
-            for (Book b : books) {
-                if (b.getIsbn().equals(updatedBook.getIsbn())) {
-                    throw new IllegalArgumentException("Новият ISBN '" + updatedBook.getIsbn() + "' вече се използва от друга книга.");
-                }
-            }
-        }
-
-        books.set(bookIndex, updatedBook);
-        return true;
     }
 
     public boolean removeBook(String isbn) {
-        return books.removeIf(book -> book.getIsbn().equals(isbn));
+        for (int i = 0; i < books.size(); i++) {
+            if (books.get(i).getIsbn().equals(isbn)) {
+                books.remove(i);
+                autoSave();
+                return true;
+            }
+        }
+        return false;
     }
 
     public Book findBookByIsbn(String isbn) {
-        for (Book book : books) {
+        for (int i = 0; i < books.size(); i++) {
+            Book book = books.get(i);
             if (book.getIsbn().equals(isbn)) {
                 return book;
             }
@@ -64,102 +52,114 @@ class Library {
         return null;
     }
 
-    public ArrayList<Book> searchBooks(String searchTerm, String criteria) {
-        ArrayList<Book> foundBooks = new ArrayList<>();
-        String term = searchTerm.toLowerCase();
-        for (Book book : books) {
-            boolean match = false;
-            switch (criteria.toLowerCase()) {
-                case "isbn":
-                    if (book.getIsbn().toLowerCase().contains(term)) match = true;
-                    break;
-                case "title":
-                    if (book.getTitle().toLowerCase().contains(term)) match = true;
-                    break;
-                case "author":
-                    if (book.getAuthor().toString().toLowerCase().contains(term)) match = true;
-                    break;
-            }
-            if (match) {
-                foundBooks.add(book);
+    public MyArrayList<Book> findBooksByTitle(String titleQuery) {
+        MyArrayList<Book> results = new MyArrayList<>();
+        String queryLower = titleQuery.toLowerCase();
+        for (int i = 0; i < books.size(); i++) {
+            Book book = books.get(i);
+            if (book.getTitle().toLowerCase().contains(queryLower)) {
+                results.add(book);
             }
         }
-        return foundBooks;
+        return results;
     }
 
-    public ArrayList<Book> getAllBooks() {
-        return new ArrayList<>(books);
-    }
-
-    public void sortBooks(String criteria) {
-        Comparator<Book> comparator = null;
-        if ("title".equalsIgnoreCase(criteria)) {
-            comparator = Comparator.comparing(Book::getTitle, String.CASE_INSENSITIVE_ORDER);
-        } else if ("author".equalsIgnoreCase(criteria)) {
-            comparator = Comparator.comparing(b -> b.getAuthor().toString(), String.CASE_INSENSITIVE_ORDER);
-        }
-
-        if (comparator != null) {
-            quickSort(this.books, 0, this.books.size() - 1, comparator);
-        }
-    }
-
-    private void quickSort(List<Book> list, int low, int high, Comparator<Book> comparator) {
-        if (low < high) {
-            int pi = partition(list, low, high, comparator);
-            quickSort(list, low, pi - 1, comparator);
-            quickSort(list, pi + 1, high, comparator);
-        }
-    }
-
-    private int partition(List<Book> list, int low, int high, Comparator<Book> comparator) {
-        Book pivot = list.get(high);
-        int i = (low - 1);
-        for (int j = low; j < high; j++) {
-            if (comparator.compare(list.get(j), pivot) <= 0) {
-                i++;
-                Collections.swap(list, i, j);
+    public MyArrayList<Book> findBooksByAuthor(String authorQuery) {
+        MyArrayList<Book> results = new MyArrayList<>();
+        String queryLower = authorQuery.toLowerCase();
+        for (int i = 0; i < books.size(); i++) {
+            Book book = books.get(i);
+            String authorFullName = book.getAuthor().getFirstName().toLowerCase() + " "
+                    + book.getAuthor().getLastName().toLowerCase();
+            if (authorFullName.contains(queryLower) ||
+                    book.getAuthor().getFirstName().toLowerCase().contains(queryLower) ||
+                    book.getAuthor().getLastName().toLowerCase().contains(queryLower)) {
+                results.add(book);
             }
         }
-        Collections.swap(list, i + 1, high);
-        return i + 1;
+        return results;
     }
 
-    public void saveBooksToFile() throws IOException {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
-            for (Book book : books) {
-                writer.println(book.getIsbn() + DELIMITER + book.getTitle() + DELIMITER + book.getAuthor().getFirstName() + DELIMITER + book.getAuthor().getLastName() + DELIMITER + book.getYear());
+    public boolean updateBook(String oldIsbn, Book updatedBookDetails) {
+        Book bookToUpdate = findBookByIsbn(oldIsbn);
+        if (bookToUpdate != null) {
+            if (!oldIsbn.equals(updatedBookDetails.getIsbn()) && findBookByIsbn(updatedBookDetails.getIsbn()) != null) {
+                throw new IllegalArgumentException(
+                        "Cannot update: New ISBN " + updatedBookDetails.getIsbn() + " already exists.");
+            }
+            bookToUpdate.setIsbn(updatedBookDetails.getIsbn());
+            bookToUpdate.setTitle(updatedBookDetails.getTitle());
+            bookToUpdate.setAuthor(updatedBookDetails.getAuthor());
+            bookToUpdate.setPublicationYear(updatedBookDetails.getPublicationYear());
+            autoSave();
+            return true;
+        }
+        return false;
+    }
+
+    public MyArrayList<Book> getAllBooks() {
+        return books;
+    }
+
+    public void sortBooksByTitle() {
+        MergeSort.sort(books, new MergeSort.BookTitleComparator());
+    }
+
+    public void sortBooksByAuthor() {
+        MergeSort.sort(books, new MergeSort.BookAuthorComparator());
+    }
+
+    public void saveToFile(String filename) throws IOException {
+        if (filename == null || filename.trim().isEmpty()) {
+            filename = DEFAULT_FILE_NAME;
+        }
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {
+            for (int i = 0; i < books.size(); i++) {
+                writer.write(books.get(i).toFileString());
+                writer.newLine();
             }
         }
     }
 
-    public void loadBooksFromFile() throws IOException {
-        books.clear();
-        File file = new File(FILE_NAME);
+    public void loadFromFile(String filename) throws IOException {
+        if (filename == null || filename.trim().isEmpty()) {
+            filename = DEFAULT_FILE_NAME;
+        }
+        File file = new File(filename);
         if (!file.exists()) {
+            System.out.println("Data file " + filename + " not found. Starting with an empty library.");
             return;
         }
-        try (BufferedReader reader = new BufferedReader(new FileReader(FILE_NAME))) {
+
+        books.clear();
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                String[] parts = line.split(Pattern.quote(DELIMITER));
-                if (parts.length == 5) {
+                if (line.trim().isEmpty())
+                    continue;
+                Book book = Book.fromFileString(line);
+                if (book != null) {
                     try {
-                        String isbn = parts[0];
-                        String title = parts[1];
-                        String authorFirstName = parts[2];
-                        String authorLastName = parts[3];
-                        int year = Integer.parseInt(parts[4]);
-                        books.add(new Book(isbn, title, new Author(authorFirstName, authorLastName), year));
-                    } catch (NumberFormatException e) {
-                        System.err.println("Грешка при парсване на годината за ред: " + line + " -> " + e.getMessage());
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        System.err.println("Грешен формат на ред: " + line + " -> " + e.getMessage());
+                        addBook(book);
+                    } catch (IllegalArgumentException e) {
+                        System.err.println("Skipping duplicate or invalid book during load: " + e.getMessage()
+                                + " for line: " + line);
                     }
                 } else {
-                    System.err.println("Некоректен ред във файла: " + line + " (очакван брой части: 5, получен: " + parts.length + ")");
+                    System.err.println("Could not parse book from line: " + line);
                 }
             }
         }
+    }
+
+    public MyArrayList<Book> findBooksByYear(int year) {
+        MyArrayList<Book> results = new MyArrayList<>();
+        for (int i = 0; i < books.size(); i++) {
+            Book book = books.get(i);
+            if (book.getPublicationYear() == year) {
+                results.add(book);
+            }
+        }
+        return results;
     }
 }
